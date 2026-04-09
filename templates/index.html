@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PL Match Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #00ff87;
+      --purple:  #6c3fff;
+      --dark:    #0d0d14;
+      --card:    #13131e;
+      --border:  #22223a;
+      --text:    #e8e8f0;
+      --muted:   #6b6b8a;
+      --win:     #00ff87;
+      --draw:    #f7c948;
+      --loss:    #ff4d6d;
+    }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── background texture ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 80% 10%, rgba(108,63,255,.15) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 30% at 10% 90%, rgba(0,255,135,.08) 0%, transparent 55%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* ── header ── */
+    header {
+      padding: 40px 0 32px;
+      display: flex;
+      align-items: flex-end;
+      gap: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 40px;
+    }
+    .logo {
+      width: 48px; height: 48px;
+      background: var(--green);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      color: var(--dark);
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(28px, 5vw, 44px);
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+    header h1 span { color: var(--green); }
+    .season-badge {
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px;
+    }
+
+    /* ── tabs ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 32px; }
+    .tab {
+      padding: 9px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      transition: all .2s;
+    }
+    .tab.active { background: var(--card); border-color: var(--border); color: var(--text); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* ── panel ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── team selector ── */
+    .selector-grid {
+      display: grid;
+      grid-template-columns: 1fr 80px 1fr;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .vs-circle {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: grid; place-items: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      color: var(--muted);
+      margin: 0 auto;
+    }
+    label { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 8px; }
+    select {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      padding: 13px 16px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6b8a' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    select:focus { outline: none; border-color: var(--purple); }
+
+    .predict-btn {
+      width: 100%;
+      padding: 15px;
+      background: var(--green);
+      color: var(--dark);
+      border: none;
+      border-radius: 10px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      margin-bottom: 36px;
+    }
+    .predict-btn:hover { opacity: .9; }
+    .predict-btn:active { transform: scale(.99); }
+    .predict-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── result card ── */
+    #result { display: none; }
+
+    .result-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .result-header .matchup {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(22px, 4vw, 34px);
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .result-header .matchup span { color: var(--green); }
+
+    /* probability bar */
+    .prob-bar-wrapper { margin-bottom: 32px; }
+    .prob-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .prob-bar {
+      height: 44px;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+    }
+    .prob-seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 17px;
+      letter-spacing: 1px;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+    .prob-seg.home { background: var(--green); color: var(--dark); }
+    .prob-seg.draw { background: var(--draw); color: var(--dark); }
+    .prob-seg.away { background: var(--purple); color: #fff; }
+
+    /* xG */
+    .xg-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin-bottom: 28px;
+    }
+    .xg-side { text-align: center; }
+    .xg-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 40px;
+      color: var(--green);
+      line-height: 1;
+    }
+    .xg-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+    .xg-divider { font-family: 'Bebas Neue', sans-serif; font-size: 24px; color: var(--border); }
+
+    /* stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .stat-card h3 {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .val { font-weight: 600; }
+
+    /* form bubbles */
+    .form-row { display: flex; gap: 6px; margin-top: 4px; }
+    .form-bubble {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .form-bubble.W { background: var(--win); color: var(--dark); }
+    .form-bubble.D { background: var(--draw); color: var(--dark); }
+    .form-bubble.L { background: var(--loss); color: #fff; }
+
+    /* h2h */
+    .h2h-bar-wrapper { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .h2h-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--green); }
+    .h2h-bar.draw { background: var(--draw); }
+    .h2h-bar.away { background: var(--purple); }
+    .h2h-nums { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    /* ── standings table ── */
+    .standings-table { width: 100%; border-collapse: collapse; }
+    .standings-table th {
+      font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--muted); text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border);
+    }
+    .standings-table th:first-child { text-align: left; }
+    .standings-table td { padding: 11px 10px; font-size: 14px; text-align: right; border-bottom: 1px solid var(--border); }
+    .standings-table td:first-child { text-align: left; }
+    .standings-table tr:last-child td { border-bottom: none; }
+    .standings-table tr:hover td { background: var(--card); }
+    .pos { color: var(--muted); font-size: 13px; margin-right: 10px; }
+    .pts { font-weight: 700; color: var(--green); }
+    .standings-wrapper {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      padding: 0 4px;
+    }
+
+    /* ── error ── */
+    .error-msg {
+      background: rgba(255,77,109,.1);
+      border: 1px solid var(--loss);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: var(--loss);
+      font-size: 14px;
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    /* ── spinner ── */
+    .spinner {
+      width: 24px; height: 24px;
+      border: 3px solid rgba(255,255,255,.1);
+      border-top-color: var(--dark);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: none;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── fade-in ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp .4s ease forwards; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">PL</div>
+    <h1>Match <span>Predictor</span></h1>
+    <span class="season-badge">2024 / 25 Season</span>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('predict', this)">Predict</button>
+    <button class="tab" onclick="switchTab('standings', this)">Standings</button>
+  </div>
+
+  <!-- ── PREDICT PANEL ── -->
+  <div class="panel active" id="tab-predict">
+    <div class="selector-grid">
+      <div>
+        <label>Home Team</label>
+        <select id="home-select">
+          {% for team in teams %}
+          <option>{{ team }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="vs-circle">VS</div>
+      <div>
+        <label>Away Team</label>
+        <select id="away-select">
+          {% for team in teams %}
+          <option>{{ team }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="error-msg" id="error-msg"></div>
+
+    <button class="predict-btn" id="predict-btn" onclick="runPrediction()">
+      <span id="btn-text">Predict Match</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+
+    <!-- result -->
+    <div id="result"></div>
+  </div>
+
+  <!-- ── STANDINGS PANEL ── -->
+  <div class="panel" id="tab-standings">
+    <div class="standings-wrapper">
+      <table class="standings-table" id="standings-table">
+        <thead>
+          <tr>
+            <th>#&nbsp;&nbsp;Team</th>
+            <th>P</th><th>W</th><th>D</th><th>L</th>
+            <th>GF</th><th>GA</th><th>GD</th><th>Pts</th>
+          </tr>
+        </thead>
+        <tbody id="standings-body">
+          <tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── default selection so home ≠ away ──
+  const homeEl = document.getElementById('home-select');
+  const awayEl = document.getElementById('away-select');
+  if (awayEl.options.length > 1) awayEl.selectedIndex = 1;
+
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'standings') loadStandings();
+  }
+
+  async function runPrediction() {
+    const home = homeEl.value;
+    const away = awayEl.value;
+    const errEl = document.getElementById('error-msg');
+    const resultEl = document.getElementById('result');
+    const btn = document.getElementById('predict-btn');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('spinner');
+
+    errEl.style.display = 'none';
+    resultEl.style.display = 'none';
+
+    if (home === away) {
+      errEl.textContent = 'Please select two different teams.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    spinner.style.display = 'block';
+
+    try {
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ home_team: home, away_team: away })
+      });
+      const d = await res.json();
+      if (!res.ok) { errEl.textContent = d.error || 'Prediction failed.'; errEl.style.display = 'block'; return; }
+      renderResult(d);
+    } catch (e) {
+      errEl.textContent = 'Server error. Is Flask running?';
+      errEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btnText.style.display = '';
+      spinner.style.display = 'none';
+    }
+  }
+
+  function renderResult(d) {
+    const el = document.getElementById('result');
+    const h2hTotal = d.h2h.home_wins + d.h2h.draws + d.h2h.away_wins || 1;
+
+    const formHTML = (form) => form.length
+      ? form.map(r => `<div class="form-bubble ${r}">${r}</div>`).join('')
+      : '<span style="color:var(--muted);font-size:13px">No data</span>';
+
+    el.innerHTML = `
+      <div class="fade-up">
+        <div class="result-header">
+          <div class="matchup">${d.home_team} <span>vs</span> ${d.away_team}</div>
+        </div>
+
+        <div class="prob-bar-wrapper">
+          <div class="prob-labels">
+            <span>${d.home_team} wins — ${d.home_prob}%</span>
+            <span>Draw — ${d.draw_prob}%</span>
+            <span>${d.away_prob}% — ${d.away_team} wins</span>
+          </div>
+          <div class="prob-bar">
+            <div class="prob-seg home" style="width:${d.home_prob}%">${d.home_prob}%</div>
+            <div class="prob-seg draw" style="width:${d.draw_prob}%">${d.draw_prob}%</div>
+            <div class="prob-seg away" style="width:${d.away_prob}%">${d.away_prob}%</div>
+          </div>
+        </div>
+
+        <div class="xg-row">
+          <div class="xg-side">
+            <div class="xg-num">${d.home_xg}</div>
+            <div class="xg-label">Home xG</div>
+          </div>
+          <div class="xg-divider">—</div>
+          <div class="xg-side">
+            <div class="xg-label">Away xG</div>
+            <div class="xg-num" style="color:var(--purple)">${d.away_xg}</div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>${d.home_team} (Home)</h3>
+            <div class="stat-row"><span>Played</span><span class="val">${d.home_stats.played}</span></div>
+            <div class="stat-row"><span>Wins</span><span class="val">${d.home_stats.wins}</span></div>
+            <div class="stat-row"><span>Draws</span><span class="val">${d.home_stats.draws}</span></div>
+            <div class="stat-row"><span>Losses</span><span class="val">${d.home_stats.losses}</span></div>
+            <div class="stat-row"><span>Goals For</span><span class="val">${d.home_stats.goals_for}</span></div>
+            <div class="stat-row"><span>Goals Against</span><span class="val">${d.home_stats.goals_against}</span></div>
+            <div style="margin-top:12px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Last 5</div>
+              <div class="form-row">${formHTML(d.home_form)}</div>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <h3>${d.away_team} (Away)</h3>
+            <div class="stat-row"><span>Played</span><span class="val">${d.away_stats.played}</span></div>
+            <div class="stat-row"><span>Wins</span><span class="val">${d.away_stats.wins}</span></div>
+            <div class="stat-row"><span>Draws</span><span class="val">${d.away_stats.draws}</span></div>
+            <div class="stat-row"><span>Losses</span><span class="val">${d.away_stats.losses}</span></div>
+            <div class="stat-row"><span>Goals For</span><span class="val">${d.away_stats.goals_for}</span></div>
+            <div class="stat-row"><span>Goals Against</span><span class="val">${d.away_stats.goals_against}</span></div>
+            <div style="margin-top:12px">
+              <div style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Last 5</div>
+              <div class="form-row">${formHTML(d.away_form)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <h3>Head to Head</h3>
+          <div class="h2h-bar-wrapper">
+            <div class="h2h-bar" style="flex:${d.h2h.home_wins || .1}"></div>
+            <div class="h2h-bar draw" style="flex:${d.h2h.draws || .1}"></div>
+            <div class="h2h-bar away" style="flex:${d.h2h.away_wins || .1}"></div>
+          </div>
+          <div class="h2h-nums">
+            <span>${d.home_team}: ${d.h2h.home_wins} W</span>
+            <span>Draws: ${d.h2h.draws}</span>
+            <span>${d.away_team}: ${d.h2h.away_wins} W</span>
+          </div>
+        </div>
+      </div>
+    `;
+    el.style.display = 'block';
+  }
+
+  async function loadStandings() {
+    const body = document.getElementById('standings-body');
+    body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">Loading…</td></tr>';
+    try {
+      const res = await fetch('/standings');
+      const rows = await res.json();
+      body.innerHTML = rows.map((r, i) => `
+        <tr>
+          <td><span class="pos">${i+1}</span>${r.team}</td>
+          <td>${r.played}</td><td>${r.wins}</td><td>${r.draws}</td><td>${r.losses}</td>
+          <td>${r.gf}</td><td>${r.ga}</td>
+          <td style="color:${r.gd >= 0 ? 'var(--win)' : 'var(--loss)'}">${r.gd > 0 ? '+' : ''}${r.gd}</td>
+          <td class="pts">${r.points}</td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--loss)">Failed to load standings.</td></tr>';
+    }
+  }
+</script>
+</body>
+</html>
