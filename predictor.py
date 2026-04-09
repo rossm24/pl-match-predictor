@@ -9,6 +9,10 @@ from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings("ignore")
 
+from dotenv import load_dotenv
+load_dotenv()
+print("API KEY:", os.environ.get("FOOTBALL_API_KEY"))  # remove after testing 
+
 API_KEY = os.environ.get("FOOTBALL_API_KEY", "YOUR_API_KEY_HERE")
 BASE_URL = "https://api.football-data.org/v4"
 HEADERS = {"X-Auth-Token": API_KEY}
@@ -30,15 +34,16 @@ class MatchPredictor:
         self._load_data()
         self._train()
 
-    # ------------------------------------------------------------------
     # Data loading
-    # ------------------------------------------------------------------
 
     def _load_data(self):
         """Fetch completed PL matches from this season."""
         try:
             data = api_get(f"/competitions/{PL_ID}/matches?status=FINISHED")
             self.matches = data.get("matches", [])
+
+            if self.matches:
+                print("Sample match:", self.matches[0]["score"])
 
             standings_data = api_get(f"/competitions/{PL_ID}/standings")
             table = standings_data["standings"][0]["table"]
@@ -90,9 +95,7 @@ class MatchPredictor:
                     "score": {"winner": outcome},
                 })
 
-    # ------------------------------------------------------------------
     # Feature engineering
-    # ------------------------------------------------------------------
 
     def _compute_team_stats(self):
         stats = defaultdict(lambda: {
@@ -118,12 +121,12 @@ class MatchPredictor:
             stats[aw]["goals_for"] += ag
             stats[aw]["goals_against"] += hg
 
-            if winner == "HOME_WIN":
+            if winner == "HOME_TEAM":
                 stats[hw]["wins"] += 1; stats[hw]["home_wins"] += 1
                 stats[hw]["results"].append("W")
                 stats[aw]["losses"] += 1
                 stats[aw]["results"].append("L")
-            elif winner == "AWAY_WIN":
+            elif winner == "AWAY_TEAM":
                 stats[aw]["wins"] += 1; stats[aw]["away_wins"] += 1
                 stats[aw]["results"].append("W")
                 stats[hw]["losses"] += 1
@@ -154,9 +157,9 @@ class MatchPredictor:
         for m in self.matches:
             if m["homeTeam"]["name"] == home and m["awayTeam"]["name"] == away:
                 w = m["score"].get("winner")
-                if w == "HOME_WIN": hw += 1
+                if w == "HOME_TEAM": hw += 1
                 elif w == "DRAW": dw += 1
-                elif w == "AWAY_WIN": aw += 1
+                elif w == "AWAY_TEAM": aw += 1
         return hw, dw, aw
 
     def _build_features(self, home, away):
@@ -192,9 +195,7 @@ class MatchPredictor:
             h2h_hw / h2h_total, h2h_d / h2h_total, h2h_aw / h2h_total,
         ]
 
-    # ------------------------------------------------------------------
     # Training
-    # ------------------------------------------------------------------
 
     def _train(self):
         X, y = [], []
@@ -202,9 +203,9 @@ class MatchPredictor:
             home = m["homeTeam"]["name"]
             away = m["awayTeam"]["name"]
             winner = m["score"].get("winner")
-            if winner not in ("HOME_WIN", "DRAW", "AWAY_WIN"):
+            if winner not in ("HOME_TEAM", "DRAW", "AWAY_TEAM"):
                 continue
-            label = {"HOME_WIN": 0, "DRAW": 1, "AWAY_WIN": 2}[winner]
+            label = {"HOME_TEAM": 0, "DRAW": 1, "AWAY_TEAM": 2}[winner]
             try:
                 feats = self._build_features(home, away)
                 X.append(feats)
@@ -221,9 +222,7 @@ class MatchPredictor:
         self.model.fit(X, y)
         print(f"[Model] Trained on {len(X)} matches.")
 
-    # ------------------------------------------------------------------
     # Prediction
-    # ------------------------------------------------------------------
 
     def predict(self, home, away):
         feats = self._build_features(home, away)
@@ -280,9 +279,7 @@ class MatchPredictor:
             "h2h": {"home_wins": h2h_hw, "draws": h2h_d, "away_wins": h2h_aw},
         }
 
-    # ------------------------------------------------------------------
     # Helpers
-    # ------------------------------------------------------------------
 
     def get_teams(self):
         return self.teams
