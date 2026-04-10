@@ -17,6 +17,7 @@ API_KEY = os.environ.get("FOOTBALL_API_KEY", "YOUR_API_KEY_HERE")
 BASE_URL = "https://api.football-data.org/v4"
 HEADERS = {"X-Auth-Token": API_KEY}
 PL_ID = 2021  # Premier League competition ID
+YEAR = [2023, 2024, 2025]  # Change as needed for different seasons
 
 
 def api_get(path):
@@ -33,27 +34,41 @@ class MatchPredictor:
         self.team_stats = {}
         self._load_data()
         self._train()
+        self._load_standings_data()
 
     # Data loading
 
     def _load_data(self):
-        """Fetch completed PL matches from this season."""
+        """Fetch completed PL matches from every season."""
         try:
-            data = api_get(f"/competitions/{PL_ID}/matches?status=FINISHED")
-            self.matches = data.get("matches", [])
+            self.matches = []
+            for year in YEAR:
+                data = api_get(f"/competitions/{PL_ID}/matches?status=FINISHED&season={year}")
+                self.matches.extend(data.get("matches", []))
 
-            if self.matches:
-                print("Sample match:", self.matches[0]["score"])
-
-            standings_data = api_get(f"/competitions/{PL_ID}/standings")
-            table = standings_data["standings"][0]["table"]
-            self.teams = sorted([row["team"]["name"] for row in table])
+            #standings_data = api_get(f"/competitions/{PL_ID}/standings?season=2025")
+            #table = standings_data["standings"][0]["table"]
+            #self.teams = sorted([row["team"]["name"] for row in table])
 
             self._compute_team_stats()
         except Exception as e:
             print(f"[Warning] Could not fetch live data: {e}")
             print("Using demo data instead.")
             self._load_demo_data()
+
+    def _load_standings_data(self):
+        # fetch this years current standings, need to keep separate from historical matches to avoid data leakage
+        try:
+            standings_data = api_get(f"/competitions/{PL_ID}/standings?season={YEAR[-1]}")
+            table = standings_data["standings"][0]["table"]
+            self.teams = sorted([row["team"]["name"] for row in table])
+            self.current_standings = table
+        except Exception as e:
+            print("Could not fetch standings data.")
+
+        print(self.current_standings[0])
+        print(list(self.team_stats.items())[0])
+
 
     def _load_demo_data(self):
         """Fallback demo data so the app works without an API key."""
@@ -283,14 +298,13 @@ class MatchPredictor:
 
     def get_teams(self):
         return self.teams
-
+    
     def get_standings(self):
         rows = []
-        for team, s in self.team_stats.items():
-            pts = s["wins"] * 3 + s["draws"]
-            rows.append({"team": team, "played": s["played"], "wins": s["wins"],
-                         "draws": s["draws"], "losses": s["losses"],
-                         "gf": s["goals_for"], "ga": s["goals_against"],
-                         "gd": s["goals_for"] - s["goals_against"], "points": pts})
+        for team in self.current_standings:
+            rows.append({"team": team["team"]["name"], "played": team["playedGames"], "wins": team["won"],
+                         "draws": team["draw"], "losses": team["lost"],
+                         "gf": team["goalsFor"], "ga": team["goalsAgainst"],
+                         "gd": team["goalDifference"], "points": team["points"]})
         rows.sort(key=lambda r: (-r["points"], -r["gd"]))
         return rows
